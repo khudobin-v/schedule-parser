@@ -25,7 +25,9 @@ def parse_schedule(text):
     weekend_days_en = f"{day_types_en[2]} {day_types_en[3]}" if len(day_types_en) >= 4 else f"{day_types_en[2]}" if len(day_types_en) >= 3 else ""
     
     # Parse time schedule data (lines 7-24 contain the actual schedule)
-    schedule_data = []
+    business_schedule = []
+    weekend_schedule = []
+    
     # We'll stop at the first line that doesn't look like a schedule entry
     for i in range(7, len(lines)):  # Start from line 7
         line = lines[i].strip()
@@ -38,12 +40,38 @@ def parse_schedule(text):
             first_part = parts[0]
             if first_part.isdigit() and 0 <= int(first_part) <= 23:
                 # This looks like a valid schedule entry
+                
+                # Try to detect where the weekend times start
+                # Based on the pattern in the data, there seems to be a separator
+                # Let's try to find the duplicate hour that might indicate the split
                 hour = first_part
-                minutes = parts[1:]  # Remaining parts are minutes
-                schedule_data.append({
-                    'hour': hour,
-                    'minutes': minutes
-                })
+                minutes = parts[1:]
+                
+                # Look for a pattern where the same hour appears twice in the line
+                # This often indicates a split between business and weekend schedules
+                split_index = find_split_index(parts)
+                
+                if split_index != -1:
+                    business_minutes = minutes[:split_index-1]  # -1 because split_index includes the repeated hour
+                    weekend_minutes = minutes[split_index:]
+                    
+                    if business_minutes:
+                        business_schedule.append({
+                            'hour': hour,
+                            'minutes': business_minutes
+                        })
+                    
+                    if weekend_minutes:
+                        weekend_schedule.append({
+                            'hour': hour,
+                            'minutes': weekend_minutes
+                        })
+                else:
+                    # If no clear split found, assume all times are for business days
+                    business_schedule.append({
+                        'hour': hour,
+                        'minutes': minutes
+                    })
             else:
                 # This doesn't look like a schedule entry, so we've reached the footer
                 footer_start = i
@@ -72,11 +100,27 @@ def parse_schedule(text):
             'business_days_en': business_days_en,
             'weekend_days_en': weekend_days_en
         },
-        'schedule': schedule_data,
+        'schedule': {
+            'business_days': business_schedule,
+            'weekends': weekend_schedule
+        },
         'footer': footer_info
     }
     
     return result
+
+
+def find_split_index(parts):
+    """
+    Find the index where weekend times start by looking for repeating hours
+    """
+    for i in range(2, len(parts)-1):  # Start from 2 to avoid comparing first elements
+        if parts[i].isdigit() and 0 <= int(parts[i]) <= 23:
+            # Check if this hour already appeared earlier in the list
+            for j in range(i):
+                if parts[j].isdigit() and parts[j] == parts[i]:
+                    return i  # Found the split point
+    return -1  # No split point found
 
 def main():
     # Read the input text
